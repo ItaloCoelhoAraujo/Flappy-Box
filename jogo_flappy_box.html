@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width">
+        <title>Jogo do "Flappy Box"</title>
+
+        <style>
+            #screen {
+                border: 1px solid #CCC;
+            }
+        </style>
+    </head>
+
+    <body>
+        <canvas id="screen" width="500" height="300"></canvas>
+        <br>
+        <button onmousedown="restart()">Restart</button>
+        <p>Use as setas do teclado para controlar o quadrado vermelho.</p>
+        <p>Quanto será o seu score?!</p>
+
+        <script>
+            const canvas = document.getElementById('screen')
+            const context = canvas.getContext('2d')
+
+            function restart() {
+                location.reload()
+            }
+
+            const observers = {
+                observersList: [],
+                subscribe: function (observerFunction) {
+                    this.observersList.push(observerFunction)
+                },
+                notifyAll: function (event) {
+                    for(let observerFunction of this.observersList) {
+                        observerFunction(event)
+                    }
+                }
+            }
+
+            //Model
+            var frameNum = 0
+
+            const score = createComponent('black', canvas.width - 120, 20, {text: {size: '20px', font: 'Arial'}})
+
+            const player = createPlayer()
+            observers.subscribe(player.movePlayer)
+
+            const obstacles = []
+
+            function generateObstacles() {
+                let x, height, gap, minHeight, maxHeight, minGap, maxGap
+                if(frameNum == 1 || everyinterval(50)){
+                    x = canvas.width
+                    minHeight = 30
+                    maxHeight = 230
+                    height = Math.floor(Math.random() * (maxHeight - minHeight + 1) + minHeight)
+                    minGap = 60
+                    maxGap = 100
+                    gap = Math.floor(Math.random() * (maxGap - minGap + 1) + minGap)
+
+                    obstacles.push(createComponent('black', x, 0, {normal: {width: 10, height: height}}))
+                    obstacles.push(createComponent('black', x, height + gap, {normal: {width: 10, height: x - height - gap}}))
+                }
+
+                function everyinterval(frames) {
+                    if ((frameNum / frames) % 1 == 0) {return true}
+                    return false
+                }
+            }
+
+            function deleteObstacles() {
+                for(let obstacle of obstacles) {
+                    if(obstacle.x <= -10) {
+                        obstacles.splice(0, 2)
+                    }
+                }
+            }
+            
+            function createPlayer () {
+                const atributes = createComponent('red', 20, 140, {normal: {width: 20, height: 20}})
+
+                return {
+                    atributes,
+                    movePlayer: (keyPressed) => {
+                        const acceptedMoves = {
+                            ArrowUp() {
+                                if(atributes.y - 20 >= 0) {
+                                    atributes.y -= 20
+                                }
+                            },
+                            ArrowDown() {
+                                if(atributes.y + 20 < canvas.height) {
+                                    atributes.y += 20
+                                }
+                            },
+                            ArrowLeft() {
+                                if(atributes.x - 20 >= 0) {
+                                    atributes.x -= 20
+                                }
+                            },
+                            ArrowRight() {
+                                if(atributes.x + 20 < canvas.width) {
+                                    atributes.x += 20
+                                }
+                            }
+                        }
+
+                        const moveFunction = acceptedMoves[keyPressed]
+
+                        if(moveFunction) {
+                            moveFunction()
+                        }
+                    }
+                }
+            }
+
+            function createComponent(color, x, y, {normal: {width, height} = {}, text: {size, font} = {}}) {
+                function crashCheck(otherobj) {
+                    const myleft = this.x;
+                    const myright = this.x + (this.width);
+                    const mytop = this.y;
+                    const mybottom = this.y + (this.height);
+                    const otherleft = otherobj.x;
+                    const otherright = otherobj.x + (otherobj.width);
+                    const othertop = otherobj.y;
+                    const otherbottom = otherobj.y + (otherobj.height);
+                    let crash = true;
+                    if ((mybottom < othertop) ||
+                    (mytop > otherbottom) ||
+                    (myright < otherleft) ||
+                    (myleft > otherright)) {
+                    crash = false;
+                    }
+                    return crash;
+                }
+
+                if(font) {
+                    return {
+                        color: color,
+                        x: x,
+                        y: y,
+                        size: size,
+                        font: font,
+                        type: 'text'
+                    }
+                }
+                else {
+                    return {
+                        color: color,
+                        x: x,
+                        y: y,
+                        width: width,
+                        height: height,
+                        crashCheck
+                    }
+                }
+            }
+
+            //Controller
+            createKeyboardListener()
+
+            function createKeyboardListener() {
+                document.addEventListener('keydown', handleKeyDown)
+                function handleKeyDown(event) {
+                    const keyPressed = event.key
+
+                    observers.notifyAll(keyPressed)
+                }
+            }
+
+            //View
+            const game = renderScreen()
+            const interval  = setInterval(game, 20)
+
+            function stop() {
+                clearInterval(interval)
+            }
+
+            function renderScreen() {
+                function renderComponent(component) {
+                    if(component.type === 'text') {
+                        context.font = component.size + ' ' + component.font
+                        context.fillStyle = component.color
+                        context.fillText(component.text, component.x, component.y)
+                    }
+                    else {
+                        context.fillStyle = component.color
+                        context.fillRect(component.x, component.y, component.width, component.height)
+                    }
+                }
+
+                function clearScreen () {
+                    context.clearRect(0, 0, 500, 300)
+                }
+
+                function updateScreen() {
+                    renderComponent(player.atributes)
+                    renderComponent(score)
+                    for(let obstacle of obstacles) {
+                        if(player.atributes.crashCheck(obstacle)) {
+                            stop()
+                        }
+
+                        renderComponent(obstacle)
+                        obstacle.x -= (frameNum % 50) / 2
+                    }
+                }
+
+                function update() {
+                    clearScreen()
+                    frameNum += 1
+                    score.text = 'Score: ' + frameNum
+                    generateObstacles()
+                    updateScreen()
+                    deleteObstacles()
+                }
+
+                return update
+            }
+        </script>
+    </body>
+</html>
